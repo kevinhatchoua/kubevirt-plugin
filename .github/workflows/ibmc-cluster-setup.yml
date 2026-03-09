@@ -47,16 +47,12 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          persist-credentials: false
+        uses: actions/checkout@v5
 
       - name: Setup IBM Cloud CLI
-        uses: IBM/actions-ibmcloud-cli@953e229550655a880eda6ecfb01fbbdf12f119a5
+        uses: IBM/actions-ibmcloud-cli@v1
         with:
-          api_key: ${{ secrets.IC_KEY }}
-          region: eu-de
-          group: cnv-ui
+          api_key: ${{ secrets.IBM_CLOUD_API_KEY }}
           plugins: kubernetes-service, container-registry
 
       - name: Check for existing cluster
@@ -107,7 +103,7 @@ jobs:
             echo "ERROR: Flavor '${FLAVOR}' is not available in zone '${ZONE}'."
             echo ""
             echo "Available flavors in '${ZONE}':"
-            echo "${LOCATIONS_JSON}" | jq -r --arg z "${ZONE}" '.[] | select(.id == $z) | .flavors | split(",")[]' | sort
+            echo "${LOCATIONS_JSON}" | jq -r --arg z "${ZONE}" '.[] | select(.id == $z) | .flavors[]? | .id' | sort
             exit 2
           fi
           echo "Flavor '${FLAVOR}' is available in zone '${ZONE}'"
@@ -116,9 +112,6 @@ jobs:
         if: steps.check_cluster.outputs.exists == 'false'
         env:
           ZONE: ${{ inputs.zone }}
-          OPENSHIFT_VERSION: ${{ inputs.openshift_version }}
-          WORKER_FLAVOR: ${{ inputs.worker_flavor }}
-          WORKER_COUNT: ${{ inputs.worker_count }}
         run: |
           echo "Looking up existing VLANs in zone '${ZONE}'..."
           VLAN_JSON=$(ibmcloud oc vlan ls --zone "${ZONE}" --output json 2>/dev/null || echo "[]")
@@ -132,31 +125,27 @@ jobs:
             echo "No existing VLANs in zone, new VLANs will be created"
           fi
 
-          echo "Creating cluster '${CLUSTER_NAME}' with ${WORKER_COUNT}x ${WORKER_FLAVOR} workers in zone ${ZONE}..."
-          VLAN_ARGS=()
-          if [[ -n "${PRIVATE_VLAN}" ]]; then
-            VLAN_ARGS+=(--private-vlan "${PRIVATE_VLAN}")
-          fi
-          if [[ -n "${PUBLIC_VLAN}" ]]; then
-            VLAN_ARGS+=(--public-vlan "${PUBLIC_VLAN}")
-          fi
+          echo "Creating cluster '${CLUSTER_NAME}' with ${{ inputs.worker_count }}x ${{ inputs.worker_flavor }} workers in zone ${ZONE}..."
           ibmcloud oc cluster create classic \
             --name "${CLUSTER_NAME}" \
-            --version "${OPENSHIFT_VERSION}" \
-            --flavor "${WORKER_FLAVOR}" \
-            --workers "${WORKER_COUNT}" \
+            --version "${{ inputs.openshift_version }}" \
+            --flavor "${{ inputs.worker_flavor }}" \
+            --workers "${{ inputs.worker_count }}" \
             --zone "${ZONE}" \
-            "${VLAN_ARGS[@]}"
+            --private-vlan "${PRIVATE_VLAN}" \
+            --public-vlan "${PUBLIC_VLAN}"
 
       - name: Wait for cluster to be ready to use
         run: |
           ./ci-scripts/check-roks-cluster-state.sh
 
-      - name: Install oc client from cluster version
+      - name: Install oc client from cluster
         run: |
-          CLUSTER_JSON="$(ibmcloud oc cluster get --cluster "${CLUSTER_NAME}" --output json)"
-          export CLUSTER_JSON
-          bash ./ci-scripts/install-oc-client.sh
+          INGRESS=$(ibmcloud oc cluster get --cluster "${CLUSTER_NAME}" --json | jq -r '.ingressHostname')
+          curl -kLo oc.tar "https://downloads-openshift-console.${INGRESS}/amd64/linux/oc.tar"
+          tar -xvf oc.tar
+          sudo mv oc /usr/local/bin/
+          echo "oc version: $(oc version --client)"
 
       - name: Configure kubeconfig
         run: |
@@ -184,12 +173,13 @@ jobs:
           fi
           echo "ARC secrets are present."
 
-      - name: Setup ARC runner image
+      - name: Setup ARC runner image and dind mirror
         id: build_runner
         env:
           OC_VERSION: '4.20'
         run: |
-          IMAGE_REF=$(./ci-scripts/images/setup-arc-runner-image.sh | grep '^IMAGE_REF=' | cut -d= -f2-)
+          ./ci-scripts/arc/setup-dind-mirror.sh
+          IMAGE_REF=$(./ci-scripts/arc/setup-runner-image.sh | grep '^IMAGE_REF=' | cut -d= -f2-)
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 
       - name: Install ARC
@@ -214,23 +204,17 @@ jobs:
 
       - name: Setup summary
         if: always()
-        env:
-          INPUT_ZONE: ${{ inputs.zone }}
-          INPUT_VERSION: ${{ inputs.openshift_version }}
-          INPUT_FLAVOR: ${{ inputs.worker_flavor }}
-          INPUT_WORKERS: ${{ inputs.worker_count }}
-          INPUT_KVM: ${{ inputs.kvm_emulation }}
         run: |
           echo "## Hot Cluster Setup Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Parameter | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-----------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Cluster | \`${CLUSTER_NAME}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Zone | \`${INPUT_ZONE}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| OpenShift | \`${INPUT_VERSION}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Worker Flavor | \`${INPUT_FLAVOR}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Workers | \`${INPUT_WORKERS}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| KVM Emulation | \`${INPUT_KVM}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Zone | \`${{ inputs.zone }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| OpenShift | \`${{ inputs.openshift_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Worker Flavor | \`${{ inputs.worker_flavor }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Workers | \`${{ inputs.worker_count }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| KVM Emulation | \`${{ inputs.kvm_emulation }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if oc cluster-info &>/dev/null; then
             echo "Cluster is **healthy** and ready for CI." >> "$GITHUB_STEP_SUMMARY"

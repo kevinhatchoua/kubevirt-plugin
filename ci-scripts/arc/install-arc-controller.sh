@@ -13,8 +13,6 @@
 set -euo pipefail
 ARC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CI_SCRIPTS_DIR="$(cd "${ARC_DIR}/.." && pwd)"
-source "${CI_SCRIPTS_DIR}/_cluster-helpers.sh"
-verify_oc
 
 ARC_CONTROLLER_NS="${ARC_CONTROLLER_NS:-arc-systems}"
 ARC_CONTROLLER_INSTALL_NAME="${ARC_CONTROLLER_INSTALL_NAME:-arc}"
@@ -24,9 +22,15 @@ ARC_VERSION="${ARC_VERSION:-0.14.0}"
 echo "=== ARC controller installation (OpenShift) ==="
 echo "  ARC_CONTROLLER_NS:           ${ARC_CONTROLLER_NS}"
 echo "  ARC_CONTROLLER_INSTALL_NAME: ${ARC_CONTROLLER_INSTALL_NAME}"
-echo "  ARC_HELM_REPO:               ${ARC_HELM_REPO}"
 echo "  ARC_VERSION:                 ${ARC_VERSION}"
+echo "  ARC_HELM_REPO:               ${ARC_HELM_REPO}"
 echo ""
+
+if ! oc get clusterversion version &>/dev/null; then
+  echo "ERROR: This script targets OpenShift only."
+  echo "  Expected cluster-scoped ClusterVersion 'version'; use 'oc login' to an OpenShift cluster."
+  exit 1
+fi
 
 echo "Creating namespace ${ARC_CONTROLLER_NS}..."
 oc create namespace "${ARC_CONTROLLER_NS}" --dry-run=client -o yaml | oc apply -f -
@@ -34,23 +38,20 @@ oc create namespace "${ARC_CONTROLLER_NS}" --dry-run=client -o yaml | oc apply -
 echo "Applying ARC SCC and ClusterRole (github-arc)..."
 oc apply -f "${ARC_DIR}/arc-openshift-scc.yaml"
 
-CONTROLLER_ARGS=()
+CONTROLLER_SA_NAME="${ARC_CONTROLLER_INSTALL_NAME}-gha-rs-controller"
+CONTROLLER_ARGS=(--namespace "${ARC_CONTROLLER_NS}")
 if [[ -n "${ARC_VERSION}" && "${ARC_VERSION}" != "latest" ]]; then
   CONTROLLER_ARGS+=(--version "${ARC_VERSION}")
 fi
-
-CONTROLLER_SA_NAME="${ARC_CONTROLLER_INSTALL_NAME}-gha-rs-controller"
 CONTROLLER_ARGS+=(--set "serviceAccount.name=${CONTROLLER_SA_NAME}")
 
 echo "Installing ARC controller (Helm release: ${ARC_CONTROLLER_INSTALL_NAME})..."
-helm upgrade \
-  "${ARC_CONTROLLER_INSTALL_NAME}" \
-  "${ARC_HELM_REPO}/gha-runner-scale-set-controller" \
-  --install \
-  --namespace "${ARC_CONTROLLER_NS}" \
+helm upgrade --install "${ARC_CONTROLLER_INSTALL_NAME}" \
   "${CONTROLLER_ARGS[@]}" \
-  --wait --timeout 5m
+  "${ARC_HELM_REPO}/gha-runner-scale-set-controller" \
+  --wait
 
 echo ""
 echo "=== ARC controller installation complete ==="
+echo "  Next: ./ci-scripts/arc/install-runner-scale-set.sh   (requires ARC_CONFIG_URL + GitHub auth)"
 echo ""

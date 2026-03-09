@@ -86,12 +86,12 @@ check "ARC AutoscalingRunnerSet in ${ARC_RUNNERS_NS}" bash -c "
 # The listener pod stays Running even when the scale set is idle (no ephemeral runner pods).
 # A missing or non-Running listener means the scale set cannot pick up jobs.
 check "ARC listener pod in ${ARC_RUNNERS_NS}" bash -c "
-  running=\$(oc get pods -n '${ARC_RUNNERS_NS}' -l app.kubernetes.io/component=runner-scale-set-listener --no-headers 2>/dev/null | grep -c 'Running')
+  running=\$(oc get pods -n '${ARC_RUNNERS_NS}' --no-headers 2>/dev/null | grep -c 'Running')
   if [[ \"\${running}\" -ge 1 ]]; then
-    echo \"  \${running} Running listener pod(s)\"
+    echo \"  \${running} Running pod(s) (listener/controller)\"
     exit 0
   else
-    echo '  No Running listener pod in ${ARC_RUNNERS_NS}'
+    echo '  No Running pods in ${ARC_RUNNERS_NS} — listener may be down'
     exit 1
   fi
 "

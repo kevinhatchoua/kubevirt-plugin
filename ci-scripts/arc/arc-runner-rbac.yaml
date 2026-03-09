@@ -1,6 +1,5 @@
-# Grant the ARC runner scale set ServiceAccount CI permissions.
-# gha-runner-scale-set creates: <RUNNER_SCALE_SET_NAME>-gha-rs-no-permission
-#   (default: kubevirt-plugin-ci-gha-rs-no-permission).
+# Grant the ARC runner scale set ServiceAccount CI permissions (oc, test namespaces, KubeVirt).
+# gha-runner-scale-set creates: <RUNNER_SCALE_SET_NAME>-gha-rs-no-permission (default: kubevirt-plugin-ci-gha-rs-no-permission).
 #
 # Applied automatically by ci-scripts/arc/install-runner-scale-set.sh.
 # Subject name + namespace substituted for RUNNER_SCALE_SET_NAME / ARC_RUNNERS_NS.
@@ -9,14 +8,12 @@
 #
 # To skip cluster RBAC (custom bindings): SKIP_ARC_RUNNER_RBAC=1
 #
-# If RUNNER_SCALE_SET_NAME differs from defaults and you apply this file by hand,
-# edit subjects or use:
+# If RUNNER_SCALE_SET_NAME differs from defaults and you apply this file by hand, edit subjects or use:
 #   oc create clusterrolebinding arc-runner-ci-custom --clusterrole=arc-runner-ci \
 #     --serviceaccount=<ns>:<scale-set>-gha-rs-no-permission
 #
-# NOTE: The runner's ConfigMap access in the ci-env namespace is granted via a
-# namespaced RoleBinding created by ci-scripts/ci-env/install-ci-env-controller.sh,
-# not by this ClusterRole.
+# Alternative (cluster-admin): bind cluster-admin to the same ServiceAccount instead of arc-runner-ci.
+#
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -25,34 +22,44 @@ metadata:
   labels:
     app.kubernetes.io/component: arc-runner-rbac
 rules:
-  # --- Cluster reads (console URL, version logging) ---
+  # Read cluster and console config (for oc cluster-info, console URL)
   - apiGroups: ['']
-    resources: ['nodes']
+    resources: ['nodes', 'namespaces']
     verbs: ['get', 'list']
   - apiGroups: ['config.openshift.io']
     resources: ['consoles', 'clusterversions', 'ingresses']
     verbs: ['get', 'list']
-
-  # --- Diagnostics (pod logs, events in test namespaces) ---
+  # Create/delete test namespaces and manage resources for Cypress
   - apiGroups: ['']
-    resources: ['pods', 'pods/log', 'events']
-    verbs: ['get', 'list']
-
-  # --- Cypress cy.exec runs: oc patch virtualmachine ---
-  - apiGroups: ['kubevirt.io']
-    resources: ['virtualmachines']
-    verbs: ['get', 'list', 'watch', 'patch']
-
-  # --- check-runner job: HCO / operator version logging ---
+    resources:
+      [
+        'namespaces',
+        'pods',
+        'pods/log',
+        'services',
+        'secrets',
+        'configmaps',
+        'events',
+        'serviceaccounts',
+        'persistentvolumeclaims',
+      ]
+    verbs: ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete', 'deletecollection']
+  # Read HCO operand CRs for version logging (Log HCO and managed operator versions step)
   - apiGroups: ['operators.coreos.com']
     resources: ['clusterserviceversions']
     verbs: ['get', 'list']
   - apiGroups: ['kubevirt.io']
-    resources: ['kubevirts']
-    verbs: ['get', 'list']
+    resources:
+      [
+        'kubevirts',
+        'virtualmachines',
+        'virtualmachineinstances',
+        'virtualmachineinstancemigrations',
+      ]
+    verbs: ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete']
   - apiGroups: ['cdi.kubevirt.io']
-    resources: ['cdis']
-    verbs: ['get', 'list']
+    resources: ['cdis', 'datavolumes']
+    verbs: ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete']
   - apiGroups: ['ssp.kubevirt.io']
     resources: ['ssps']
     verbs: ['get', 'list']
@@ -62,6 +69,12 @@ rules:
   - apiGroups: ['hostpathprovisioner.kubevirt.io']
     resources: ['hostpathprovisioners']
     verbs: ['get', 'list']
+  - apiGroups: ['snapshot.storage.k8s.io']
+    resources: ['volumesnapshots']
+    verbs: ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete']
+  - apiGroups: ['subresources.kubevirt.io']
+    resources: ['virtualmachineinstances/console', 'virtualmachineinstances/vnc']
+    verbs: ['get']
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

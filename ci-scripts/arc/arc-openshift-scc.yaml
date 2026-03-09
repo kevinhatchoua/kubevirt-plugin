@@ -1,25 +1,27 @@
 # OpenShift Security Context Constraint and ClusterRole for GitHub ARC runners.
 #
 # The runner container uses UID 1001 / GID 123 via Helm template.securityContext.
-# No privileged containers or privilege escalation is needed; the CI test stack
-# (console + plugin) runs as separate unprivileged pods via the ci-test-stack
-# Helm chart.
+# With containerMode.type=dind, the chart adds a privileged docker:dind sidecar that
+# must run as root and start dockerd — so this SCC allows privileged containers and
+# RunAsAny for UIDs (stricter MustRunAs/1001 would block the dind container).
 #
 # Ref: https://developers.redhat.com/articles/2025/02/17/how-securely-deploy-github-arc-openshift
+# ARC dind template: actions-runner-controller charts gha-runner-scale-set
+#
 ---
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
   name: github-arc
   annotations:
-    kubernetes.io/description: 'ARC runners: main container as UID 1001 (Helm), non-root, unprivileged.'
+    kubernetes.io/description: 'ARC runners: main container as UID 1001 (Helm), Docker-in-Docker privileged sidecar. RunAsAny required for dind root + runner 1001.'
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-allowPrivilegeEscalation: false
-allowPrivilegedContainer: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: true
 allowedCapabilities: null
 defaultAddCapabilities: null
 fsGroup:
@@ -28,7 +30,7 @@ groups: []
 priority: null
 readOnlyRootFilesystem: false
 runAsUser:
-  type: MustRunAsNonRoot
+  type: RunAsAny
 seLinuxContext:
   type: MustRunAs
 supplementalGroups:
