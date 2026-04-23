@@ -1,16 +1,15 @@
 #!/bin/bash
 #
 # OpenShift only: create ImageStream + BuildConfig and run a binary Docker build for the
-# custom ARC runner image (ci-scripts/arc/runner-image/Dockerfile).
+# ci-env-controller image (ci-scripts/ci-env/controller-image/Dockerfile).
 #
-# Output: prints IMAGE_REF= to stdout (and to ARC_RUNNER_IMAGE_FILE if set).
+# Output: prints IMAGE_REF= to stdout (and to CI_ENV_CONTROLLER_IMAGE_FILE if set).
 #
 # Optional environment variables:
-#   NS               Namespace for the runner (default: ci-env-images)
-#   OC_VERSION       OpenShift client version build-arg (default: detect or 4.20)
-#   HELM_VERSION     Helm version build-arg (default: 3.19.0)
-#   VIRTCTL_VERSION  (default: v1.4.0)
-#   YQ_VERSION       yq version build-arg (default: v4.52.5)
+#   NS                     Namespace for the controller (default: ci-env-images)
+#   OC_VERSION             OpenShift client version build-arg (default: detect or 4.20)
+#   HELM_VERSION           Helm version build-arg (default: 3.19.0)
+#   YQ_VERSION             yq version build-arg (default: v4.52.5)
 #
 # Requires: oc logged into OpenShift; jq optional for version detection and URL resolution.
 #
@@ -25,27 +24,24 @@ source "${REPO_ROOT}/ci-scripts/_cluster-helpers.sh"
 verify_oc
 
 NS="${NS:-ci-env-images}"
-IMAGE_DIR="${SCRIPT_DIR}/arc-runner"
-IMAGE_NAME="arc-runner"
+IMAGE_DIR="${SCRIPT_DIR}/ci-env-runner"
+IMAGE_NAME="ci-env-runner"
 
 resolve_oc_version
-VIRTCTL_VERSION="${VIRTCTL_VERSION:-v1.4.0}"
 HELM_VERSION="${HELM_VERSION:-3.19.0}"
 YQ_VERSION="${YQ_VERSION:-v4.52.5}"
 
 resolve_cli_downloads
 
-echo "=== Build ARC runner image (in-cluster, OpenShift) ==="
-echo "  NS:              ${NS}"
-echo "  IMAGE_DIR:       ${IMAGE_DIR}"
-echo "  IMAGE_NAME:      ${IMAGE_NAME}"
-echo "  OC_VERSION:      ${OC_VERSION}"
-echo "  VIRTCTL_VERSION: ${VIRTCTL_VERSION}"
-echo "  HELM_VERSION:    ${HELM_VERSION}"
-echo "  YQ_VERSION:      ${YQ_VERSION}"
-echo "  OC_URL:          ${OC_URL:-(fallback to mirror.openshift.com)}"
-echo "  VIRTCTL_URL:     ${VIRTCTL_URL:-(fallback to GitHub releases)}"
-echo "  HELM_URL:        ${HELM_URL:-(fallback to get.helm.sh)}"
+echo "=== Build ci-env-runner image (in-cluster, OpenShift) ==="
+echo "  NS:                   ${NS}"
+echo "  IMAGE_DIR:            ${IMAGE_DIR}"
+echo "  IMAGE_NAME:           ${IMAGE_NAME}"
+echo "  OC_VERSION:           ${OC_VERSION}"
+echo "  HELM_VERSION:         ${HELM_VERSION}"
+echo "  YQ_VERSION:           ${YQ_VERSION}"
+echo "  OC_URL:               ${OC_URL:-(fallback to mirror.openshift.com)}"
+echo "  HELM_URL:             ${HELM_URL:-(fallback to get.helm.sh)}"
 echo ""
 
 if [[ ! -f "${IMAGE_DIR}/Dockerfile" ]]; then
@@ -79,15 +75,12 @@ spec:
   strategy:
     type: Docker
     dockerStrategy:
+      dockerfilePath: Dockerfile
       buildArgs:
         - name: OC_VERSION
           value: "${OC_VERSION}"
         - name: OC_URL
           value: "${OC_URL}"
-        - name: VIRTCTL_VERSION
-          value: "${VIRTCTL_VERSION}"
-        - name: VIRTCTL_URL
-          value: "${VIRTCTL_URL}"
         - name: HELM_VERSION
           value: "${HELM_VERSION}"
         - name: HELM_URL
@@ -101,10 +94,14 @@ spec:
   runPolicy: Serial
 EOF
 
-echo "Starting binary build from ${IMAGE_DIR}..."
-oc start-build -n "${NS}" "${IMAGE_NAME}-build" \
-  --from-dir="${IMAGE_DIR}" \
-  --follow
+# The controller-image/ directory contains a symlink to the Helm chart.
+# Use tar -ch to dereference symlinks so the build pod receives the actual
+# chart files (including templates/ subdirectory), then pipe to --from-archive.
+echo "Starting binary build from ${IMAGE_DIR} (dereferencing symlinks)..."
+tar -ch -C "${IMAGE_DIR}" . \
+  | oc start-build -n "${NS}" "${IMAGE_NAME}-build" \
+      --from-archive=- \
+      --follow
 
 resolve_internal_registry
 IMAGE_REF="${INTERNAL_REGISTRY}/${NS}/${IMAGE_NAME}:latest"
@@ -114,8 +111,8 @@ echo "=== Build complete ==="
 echo "Image: ${IMAGE_REF}"
 
 # TODO: Better handling of passing the fqdn image name to the caller
-if [[ -n "${ARC_RUNNER_IMAGE_FILE:-}" ]]; then
-  printf '%s\n' "${IMAGE_REF}" > "${ARC_RUNNER_IMAGE_FILE}"
-  echo "Wrote ${ARC_RUNNER_IMAGE_FILE}"
+if [[ -n "${CI_ENV_RUNNER_IMAGE_FILE:-}" ]]; then
+  printf '%s\n' "${IMAGE_REF}" > "${CI_ENV_RUNNER_IMAGE_FILE}"
+  echo "Wrote ${CI_ENV_RUNNER_IMAGE_FILE}"
 fi
 echo "IMAGE_REF=${IMAGE_REF}"
