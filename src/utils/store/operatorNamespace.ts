@@ -6,13 +6,12 @@ import {
   OPENSHIFT_OS_IMAGES_NS,
 } from '@kubevirt-utils/constants/constants';
 import { getName } from '@kubevirt-utils/resources/shared';
-import { DEFAULT_OPERATOR_NAMESPACE } from '@kubevirt-utils/utils/utils';
 import { k8sList, K8sResourceCommon } from '@openshift-console/dynamic-plugin-sdk';
 import { signal } from '@preact/signals-react';
 
 export const operatorNamespaceSignal = signal<null | string>(null);
 
-const resolveOperatorNamespace = async (): Promise<string> => {
+const resolveOperatorNamespace = async (): Promise<null | string> => {
   try {
     const projectsResponse = await k8sList<K8sResourceCommon>({
       model: ProjectModel,
@@ -23,13 +22,28 @@ const resolveOperatorNamespace = async (): Promise<string> => {
       ? projectsResponse
       : projectsResponse?.items || [];
 
-    if (projects.some((p) => getName(p) === OPENSHIFT_OS_IMAGES_NS)) return OPENSHIFT_CNV;
-    if (projects.some((p) => getName(p) === KUBEVIRT_OS_IMAGES_NS)) return KUBEVIRT_HYPERCONVERGED;
+    const projectNames = new Set(projects.map((project) => getName(project)).filter(Boolean));
+
+    if (projectNames.has(OPENSHIFT_OS_IMAGES_NS) && projectNames.has(OPENSHIFT_CNV)) {
+      return OPENSHIFT_CNV;
+    }
+
+    if (projectNames.has(KUBEVIRT_OS_IMAGES_NS) && projectNames.has(KUBEVIRT_HYPERCONVERGED)) {
+      return KUBEVIRT_HYPERCONVERGED;
+    }
+
+    if (projectNames.has(OPENSHIFT_CNV)) {
+      return OPENSHIFT_CNV;
+    }
+
+    if (projectNames.has(KUBEVIRT_HYPERCONVERGED)) {
+      return KUBEVIRT_HYPERCONVERGED;
+    }
   } catch {
-    // Fall through to default
+    // Fall through to null when CNV is not installed on this cluster.
   }
 
-  return DEFAULT_OPERATOR_NAMESPACE;
+  return null;
 };
 
 resolveOperatorNamespace().then((ns) => {

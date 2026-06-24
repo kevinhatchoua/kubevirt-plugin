@@ -27,10 +27,15 @@ import WelcomeButtons from './components/WelcomeButtons';
 
 import './WelcomeModal.scss';
 
+const WELCOME_MODAL_DISMISSED_LS_KEY = 'kubevirt-plugin.dontShowWelcomeModal';
+
 const WelcomeModal: FC = () => {
   useSignals();
   const { t } = useKubevirtTranslation();
   const [isOpen, setIsOpen] = useState<boolean>(true);
+  const [dismissedLocally, setDismissedLocally] = useState(
+    () => localStorage.getItem(WELCOME_MODAL_DISMISSED_LS_KEY) === 'true',
+  );
   const [quickStarts, setQuickStarts, loaded] = useKubevirtUserSettings(
     USER_SETTINGS_KEYS.quickStart,
   );
@@ -45,7 +50,27 @@ const WelcomeModal: FC = () => {
     welcomeModalDismissedSignal.value = true;
   }, []);
 
-  if (runningTourSignal.value || !loaded || quickStarts?.dontShowWelcomeModal) return null;
+  if (runningTourSignal.value || !loaded || quickStarts?.dontShowWelcomeModal || dismissedLocally) {
+    return null;
+  }
+
+  const persistDismissPreference = async (value: boolean) => {
+    if (setQuickStarts) {
+      try {
+        await setQuickStarts({ ...quickStarts, dontShowWelcomeModal: value });
+        return;
+      } catch {
+        // Fall back to local storage when user settings ConfigMap is unavailable.
+      }
+    }
+
+    if (value) {
+      localStorage.setItem(WELCOME_MODAL_DISMISSED_LS_KEY, 'true');
+    } else {
+      localStorage.removeItem(WELCOME_MODAL_DISMISSED_LS_KEY);
+    }
+    setDismissedLocally(value);
+  };
 
   return (
     <Modal
@@ -83,12 +108,12 @@ const WelcomeModal: FC = () => {
               <WelcomeButtons onClose={onClose} />
 
               <Checkbox
-                onChange={(_event, value) =>
-                  setQuickStarts({ ...quickStarts, dontShowWelcomeModal: value })
-                }
+                onChange={(_event, value) => {
+                  void persistDismissPreference(value);
+                }}
                 className="WelcomeModal__checkbox"
                 id="welcome-modal-checkbox"
-                isChecked={quickStarts?.dontShowWelcomeModal}
+                isChecked={quickStarts?.dontShowWelcomeModal || dismissedLocally}
                 label={t('Do not show this again')}
               />
             </Stack>

@@ -12,7 +12,7 @@ import useK8sWatchData from '@multicluster/hooks/useK8sWatchData';
 
 import { KUBEVIRT_USER_SETTINGS_CONFIG_MAP_NAME } from './utils/const';
 import { UseKubevirtUserSettings } from './utils/types';
-import { UserSettingsState } from './utils/userSettingsInitialState';
+import { defaultUserSettingsState, UserSettingsState } from './utils/userSettingsInitialState';
 import { parseNestedJSON, patchUserConfigMap } from './utils/utils';
 
 const useKubevirtUserSettings: UseKubevirtUserSettings = (key, cluster) => {
@@ -48,8 +48,11 @@ const useKubevirtUserSettings: UseKubevirtUserSettings = (key, cluster) => {
 
     if (!isEmpty(userConfigMap) && userName) {
       setUserSettings(
-        (<unknown>parseNestedJSON(userConfigMap?.data?.[userName]) || {}) as UserSettingsState,
+        (<unknown>parseNestedJSON(userConfigMap?.data?.[userName]) ||
+          defaultUserSettingsState) as UserSettingsState,
       );
+    } else {
+      setUserSettings(defaultUserSettingsState);
     }
 
     setSettingsInitialized(true);
@@ -59,7 +62,7 @@ const useKubevirtUserSettings: UseKubevirtUserSettings = (key, cluster) => {
     setLoading(true);
 
     try {
-      await patchUserConfigMap(userConfigMap, userName, data, cluster);
+      await patchUserConfigMap(userConfigMap, userName, data, cluster, operatorNamespace);
       resolve(key ? data[key] : data);
     } catch (apiError) {
       setError(apiError);
@@ -72,7 +75,7 @@ const useKubevirtUserSettings: UseKubevirtUserSettings = (key, cluster) => {
   const updateUserSetting = (val: any) => {
     return new Promise((resolve, reject) => {
       setUserSettings((prevUserSettings) => {
-        const data = key ? { ...prevUserSettings, [key]: val } : val;
+        const data = key ? { ...(prevUserSettings ?? defaultUserSettingsState), [key]: val } : val;
 
         pushUserSettingsChanges(data, resolve, reject);
 
@@ -83,7 +86,7 @@ const useKubevirtUserSettings: UseKubevirtUserSettings = (key, cluster) => {
 
   return [
     key ? userSettings?.[key] : userSettings,
-    userSettings && updateUserSetting,
+    settingsInitialized ? updateUserSetting : undefined,
     !loading && settingsInitialized,
     error || errorUser || configMapError,
   ];

@@ -1,4 +1,4 @@
-import { OnboardingPopoversHidden } from '@kubevirt-utils/components/OnboardingPopover/types';
+import { OnboardingPopoverKey, OnboardingPopoversHidden } from '@kubevirt-utils/components/OnboardingPopover/types';
 
 export type UserSettingsState = {
   cards: CardsUserSettings;
@@ -32,4 +32,18 @@ type QuickStartUserSettings = {
 
 type CardsUserSettings = {
   [cardPage: string]: { cardName: string; value: boolean };
+};
+
+export const defaultUserSettingsState: UserSettingsState = {
+  cards: {},
+  columns: {},
+  favoriteBootableVolumes: [],
+  navigation: {},
+  onboardingPopoversHidden: Object.values(OnboardingPopoverKey).reduce<OnboardingPopoversHidden>(
+    (acc, key) => ({ ...acc, [key]: false }),
+    {} as OnboardingPopoversHidden,
+  ),
+  quickStart: {},
+  savedSearches: {},
+  ssh: {},
 };
