@@ -34,6 +34,7 @@ export type UseTreeViewData = {
   loaded: boolean;
   loadError: any;
   treeData: TreeViewDataItem[];
+  vmCount: number;
 };
 
 export const useTreeViewData = (): UseTreeViewData => {
@@ -182,7 +183,8 @@ export const useTreeViewData = (): UseTreeViewData => {
       loaded,
       loadError: projectNamesError || multiclusterNamespacesError,
       treeData,
+      vmCount: sortedMemoizedVMs.length,
     }),
-    [loaded, multiclusterNamespacesError, projectNamesError, treeData],
+    [loaded, multiclusterNamespacesError, projectNamesError, sortedMemoizedVMs.length, treeData],
   );
 };

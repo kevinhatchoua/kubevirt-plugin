@@ -1,6 +1,7 @@
 import React, { FC, lazy, useMemo } from 'react';
 import { useParams } from 'react-router';
 
+import { getTabCountBadge } from '@kubevirt-utils/components/badges/TabCountBadge';
 import ErrorAlert from '@kubevirt-utils/components/ErrorAlert/ErrorAlert';
 import Loading from '@kubevirt-utils/components/Loading/Loading';
 import StateHandler from '@kubevirt-utils/components/StateHandler/StateHandler';
@@ -8,13 +9,15 @@ import useHideYamlTab, { removeYamlTabs } from '@kubevirt-utils/hooks/useHideYam
 import { useKubevirtTranslation } from '@kubevirt-utils/hooks/useKubevirtTranslation';
 import { ClusterUserDefinedNetworkModelGroupVersionKind } from '@kubevirt-utils/models';
 import { ClusterUserDefinedNetworkKind } from '@kubevirt-utils/resources/udn/types';
-import { HorizontalNav, useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
+import { HorizontalNav, NavPage, useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
 
 import VMNetworkTitle from './components/VMNetworkTitle';
+import useConnectedVMsWithNamespace from './hooks/useConnectedVMsWithNamespace';
 
 const VMNetworkDetailsPage: FC = () => {
   const { t } = useKubevirtTranslation();
   const { name } = useParams<{ name: string }>();
+  const [connectedVMs, connectedVMsLoaded] = useConnectedVMsWithNamespace(name);
   const [vmNetwork, loaded, error] = useK8sWatchResource<ClusterUserDefinedNetworkKind>({
     groupVersionKind: ClusterUserDefinedNetworkModelGroupVersionKind,
     isList: false,
@@ -43,16 +46,17 @@ const VMNetworkDetailsPage: FC = () => {
             name: t('Connected projects'),
           },
           {
+            badge: getTabCountBadge(connectedVMs.length, connectedVMsLoaded),
             component: lazy(
               () => import('./tabs/ConnectedVirtualMachines/ConnectedVirtualMachines'),
             ),
             href: 'connected-virtual-machines',
             name: t('Connected virtual machines'),
           },
-        ],
+        ] as NavPage[],
         hideYamlTab,
-      ),
-    [t, hideYamlTab],
+      ) as NavPage[],
+    [connectedVMs.length, connectedVMsLoaded, t, hideYamlTab],
   );
 
   if (!loaded) {

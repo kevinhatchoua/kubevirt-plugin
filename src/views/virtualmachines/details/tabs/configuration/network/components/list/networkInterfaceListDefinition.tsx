@@ -7,8 +7,9 @@ import PendingBadge from '@kubevirt-utils/components/badges/PendingBadge/Pending
 import NetworkIcon from '@kubevirt-utils/components/NetworkIcons/NetworkIcon';
 import { ColumnConfig } from '@kubevirt-utils/hooks/useDataViewTableSort/types';
 import { useKubevirtTranslation } from '@kubevirt-utils/hooks/useKubevirtTranslation';
+import VMNetworkResourceLink from '@kubevirt-utils/components/VMNetworkResourceLink/VMNetworkResourceLink';
+import { getNamespace } from '@kubevirt-utils/resources/shared';
 import { NO_DATA_DASH } from '@kubevirt-utils/resources/vm/utils/constants';
-import { getNetworkNameLabel } from '@kubevirt-utils/resources/vm/utils/network/network-columns';
 import { Label, Stack, StackItem } from '@patternfly/react-core';
 
 import { SimpleNICPresentation } from '../../utils/types';
@@ -66,16 +67,18 @@ const StateCell: FC<StateCellProps> = ({ row }) => {
 
 type NetworkCellProps = {
   row: SimpleNICPresentation;
+  vm: V1VirtualMachine;
 };
 
-const NetworkCell: FC<NetworkCellProps> = ({ row }) => {
-  const { t } = useKubevirtTranslation();
-  return (
-    <span data-test-id={`nic-network-${row.network?.name}`}>
-      {getNetworkNameLabel(t, { network: row.network }) ?? NO_DATA_DASH}
-    </span>
-  );
-};
+const NetworkCell: FC<NetworkCellProps> = ({ row, vm }) => (
+  <span data-test-id={`nic-network-${row.network?.name ?? 'empty'}`}>
+    {row.network ? (
+      <VMNetworkResourceLink network={row.network} vmNamespace={getNamespace(vm)} />
+    ) : (
+      NO_DATA_DASH
+    )}
+  </span>
+);
 
 const renderActionsCell = (
   row: SimpleNICPresentation,
@@ -117,7 +120,7 @@ export const getNetworkInterfaceListColumns = (
     getValue: (row) => row.network?.multus?.networkName ?? '',
     key: 'network',
     label: t('Network'),
-    renderCell: (row) => <NetworkCell row={row} />,
+    renderCell: (row, callbacks) => <NetworkCell row={row} vm={callbacks?.vm} />,
     sortable: true,
   },
   {

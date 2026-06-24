@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { matchPath, useLocation, useParams } from 'react-router';
 
 import GuidedTour from '@kubevirt-utils/components/GuidedTour/GuidedTour';
+import { getTabCountBadge } from '@kubevirt-utils/components/badges/TabCountBadge';
 import CatalogOnboardingPopover from '@kubevirt-utils/components/OnboardingPopover/components/CatalogOnboardingPopover';
 import NavCollapseOnboardingPopover from '@kubevirt-utils/components/OnboardingPopover/components/NavCollapseOnboardingPopover';
 import VMsTabOnboardingPopover from '@kubevirt-utils/components/OnboardingPopover/components/VMsTabOnboardingPopover';
@@ -87,10 +88,13 @@ const VirtualMachineNavigator: FC = () => {
                   <OverviewTab cluster={cluster} key="overview" namespace={namespace} />
                 </Tab>
                 <Tab
-                  title={
-                    <TabTitleText data-test="vm-list-tab">{t('Virtual machines')}</TabTitleText>
-                  }
                   eventKey={VM_LIST_TAB_INDEX}
+                  title={
+                    <TabTitleText className="co-tab-title-with-count" data-test="vm-list-tab">
+                      {t('Virtual machines')}
+                      {getTabCountBadge(treeProps.vmCount, treeProps.loaded)}
+                    </TabTitleText>
+                  }
                 >
                   <VirtualMachinesList
                     allVMsLoaded={treeProps.loaded}

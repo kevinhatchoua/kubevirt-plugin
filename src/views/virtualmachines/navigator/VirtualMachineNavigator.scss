@@ -6,4 +6,14 @@
   z-index: var(--pf-t--global--z-index--md);
   background-color: var(--pf-t--global--background--color--primary--default);
   padding-top: var(--pf-t--global--spacer--sm);
+
+  .co-tab-title-with-count {
+    display: inline-flex;
+    align-items: center;
+    column-gap: var(--pf-t--global--spacer--xs);
+  }
+
+  .co-tab-title-with-count.pf-v6-c-tabs__item-text {
+    display: inline-flex;
+  }
 }

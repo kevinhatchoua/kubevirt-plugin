@@ -2,77 +2,31 @@ import React, { FC } from 'react';
 import { TFunction } from 'i18next';
 import FirstItemListPopover from 'src/views/virtualmachines/list/components/FirstItemListPopover/FirstItemListPopover';
 
-import InlineCodeClipboardCopy from '@kubevirt-utils/components/Consoles/components/CloudInitCredentials/InlineCodeClipboardCopy';
+import VMNetworkResourceLink from '@kubevirt-utils/components/VMNetworkResourceLink/VMNetworkResourceLink';
 import { ColumnConfig } from '@kubevirt-utils/hooks/useDataViewTableSort/types';
-import useFQDN from '@kubevirt-utils/hooks/useFQDN/useFQDN';
-import useIsFQDNEnabled from '@kubevirt-utils/hooks/useFQDN/useIsFQDNEnabled';
 import { useKubevirtTranslation } from '@kubevirt-utils/hooks/useKubevirtTranslation';
-import { NO_DATA_DASH } from '@kubevirt-utils/resources/vm/utils/constants';
-import { getPrintableNetworkInterfaceType } from '@kubevirt-utils/resources/vm/utils/network/selectors';
+import { getNamespace } from '@kubevirt-utils/resources/shared';
+import { isPodNetwork } from '@kubevirt-utils/resources/vm/utils/network/selectors';
 import { removeLinkLocalIPV6 } from '@kubevirt-utils/utils/utils';
-import PopoverContentWithLightspeedButton from '@lightspeed/components/PopoverContentWithLightspeedButton/PopoverContentWithLightspeedButton';
-import { OLSPromptType } from '@lightspeed/utils/prompts';
-import {
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
-  DescriptionListTermHelpTextButton,
-  Popover,
-  PopoverPosition,
-} from '@patternfly/react-core';
 
 import { InterfacesData } from './utils/types';
 
 const NameCell: FC<{ row: InterfacesData }> = ({ row }) => {
-  const { t } = useKubevirtTranslation();
-  const fqdn = useFQDN(row?.network?.name, row?.vm);
-  const isFQDNEnabled = useIsFQDNEnabled();
+  const displayName = row?.iface?.name ?? row?.network?.name;
 
-  const popoverFields = {
-    [t('Model')]: row?.iface?.model,
-    [t('Name')]: row?.network?.name,
-    [t('Network')]: row?.network?.multus?.networkName ?? t('Pod networking'),
-    [t('Type')]: getPrintableNetworkInterfaceType(row?.iface),
-  };
+  if (!row.network || isPodNetwork(row.network)) {
+    return (
+      <div data-test={`network-interface-${row?.network?.name}`}>{displayName}</div>
+    );
+  }
 
   return (
     <div data-test={`network-interface-${row?.network?.name}`}>
-      <DescriptionList>
-        <Popover
-          bodyContent={(hide) => (
-            <PopoverContentWithLightspeedButton
-              content={
-                <DescriptionList isHorizontal>
-                  {Object.entries(popoverFields).map(([key, value]) => (
-                    <DescriptionListGroup key={key}>
-                      <DescriptionListTerm>{key}</DescriptionListTerm>
-                      <DescriptionListDescription>
-                        {value ?? NO_DATA_DASH}
-                      </DescriptionListDescription>
-                    </DescriptionListGroup>
-                  ))}
-                  {isFQDNEnabled && fqdn && (
-                    <DescriptionListGroup>
-                      <DescriptionListTerm>{t('FQDN')}</DescriptionListTerm>
-                      <DescriptionListDescription>
-                        <InlineCodeClipboardCopy clipboardText={fqdn} />
-                      </DescriptionListDescription>
-                    </DescriptionListGroup>
-                  )}
-                </DescriptionList>
-              }
-              hide={hide}
-              promptType={OLSPromptType.VM_NETWORKS}
-            />
-          )}
-          className="VirtualMachinesOverviewTabInterfaces--popover"
-          hasAutoWidth
-          position={PopoverPosition.left}
-        >
-          <DescriptionListTermHelpTextButton>{row?.iface?.name}</DescriptionListTermHelpTextButton>
-        </Popover>
-      </DescriptionList>
+      <VMNetworkResourceLink
+        displayLabel={displayName}
+        network={row.network}
+        vmNamespace={getNamespace(row.vm)}
+      />
     </div>
   );
 };

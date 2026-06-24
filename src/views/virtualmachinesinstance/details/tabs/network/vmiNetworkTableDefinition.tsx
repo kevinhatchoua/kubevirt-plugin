@@ -1,14 +1,19 @@
+import React from 'react';
 import { TFunction } from 'i18next';
 
+import VMNetworkResourceLink from '@kubevirt-utils/components/VMNetworkResourceLink/VMNetworkResourceLink';
 import { ColumnConfig } from '@kubevirt-utils/hooks/useDataViewTableSort/types';
 import { NO_DATA_DASH } from '@kubevirt-utils/resources/vm/utils/constants';
-import { getNetworkNameLabel } from '@kubevirt-utils/resources/vm/utils/network/network-columns';
 import { getPrintableNetworkInterfaceType } from '@kubevirt-utils/resources/vm/utils/network/selectors';
 import { VMINetworkPresentation } from '@kubevirt-utils/resources/vmi/types';
 
+export type VMINetworkTableCallbacks = {
+  vmNamespace: string;
+};
+
 export const getVMINetworkColumns = (
   t: TFunction,
-): ColumnConfig<VMINetworkPresentation, undefined>[] => [
+): ColumnConfig<VMINetworkPresentation, VMINetworkTableCallbacks>[] => [
   {
     getValue: (r) => r.network?.name ?? '',
     key: 'name',
@@ -27,8 +32,12 @@ export const getVMINetworkColumns = (
     getValue: (r) => r.network?.multus?.networkName ?? (r.network?.pod ? 'pod' : ''),
     key: 'network',
     label: t('Network'),
-    renderCell: (r) =>
-      r.network ? getNetworkNameLabel(t, { network: r.network }) || NO_DATA_DASH : NO_DATA_DASH,
+    renderCell: (r, callbacks) =>
+      r.network ? (
+        <VMNetworkResourceLink network={r.network} vmNamespace={callbacks?.vmNamespace ?? ''} />
+      ) : (
+        NO_DATA_DASH
+      ),
     sortable: true,
   },
   {
